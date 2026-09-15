@@ -1,0 +1,51 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Availability {
+  ONLINE
+  OFFLINE
+}
+
+model Driver {
+  id           String       @id @default(uuid())
+  userId       String       @unique
+  name         String
+  vehicleType  String
+
+  // Driver-controlled, written only by the HTTP API.
+  availability Availability @default(OFFLINE)
+
+  // Event-controlled, written only by the Kafka consumer. Splitting these
+  // avoids two writers racing over one status field.
+  currentShipmentId String?
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([availability, currentShipmentId])
+}
+
+// Dedup for consumed events; Kafka is at-least-once.
+model ProcessedEvent {
+  eventId   String   @id
+  eventType String
+  createdAt DateTime @default(now())
+}
+
+// Poison messages, parked so they cannot block a partition.
+model DeadLetter {
+  id        String   @id @default(uuid())
+  topic     String
+  partition Int
+  offset    String
+  payload   String
+  error     String
+  createdAt DateTime @default(now())
+}
