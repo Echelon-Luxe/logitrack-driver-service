@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   // Pinned, not detected. The build stage (node:24-bookworm-slim) has no
   // openssl CLI, so Prisma cannot detect the platform and falls back to
   // debian-openssl-1.1.x - while the distroless runtime needs 3.0.x, and
@@ -19,10 +19,17 @@ enum Availability {
 }
 
 model Driver {
-  id           String       @id @default(uuid())
-  userId       String       @unique
-  name         String
-  vehicleType  String
+  id          String @id @default(uuid())
+  userId      String @unique
+  name        String
+  vehicleType String
+  plateNumber String?
+  phone       String?
+
+  // Self-registered drivers wait for dispatch to vet them. Null = pending; a
+  // pending driver cannot go online, so cannot be assigned work.
+  approvedAt  DateTime?
+  approvedBy  String?
 
   // Driver-controlled, written only by the HTTP API.
   availability Availability @default(OFFLINE)
@@ -31,8 +38,8 @@ model Driver {
   // avoids two writers racing over one status field.
   currentShipmentId String?
 
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([availability, currentShipmentId])
 }

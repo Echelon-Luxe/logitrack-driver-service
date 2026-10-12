@@ -3,7 +3,7 @@ import { setAvailability, listDrivers, withStatus, ConflictError, NotFoundError 
 
 const driver = (over: Record<string, unknown> = {}) => ({
   id: 'drv-1', userId: 'u1', name: 'Sam', vehicleType: 'VAN',
-  availability: 'ONLINE', currentShipmentId: null,
+  availability: 'ONLINE', currentShipmentId: null, approvedAt: new Date(),
   createdAt: new Date(), updatedAt: new Date(), ...over,
 });
 
@@ -37,6 +37,13 @@ describe('setAvailability', () => {
     expect((await setAvailability(db, 'drv-1', 'ONLINE')).status).toBe('AVAILABLE');
   });
 
+  // An unvetted driver online would be assignable; approval gates the pool.
+  it('refuses to bring an unapproved driver online', async () => {
+    const { db, update } = makeDb(driver({ availability: 'OFFLINE', approvedAt: null }));
+    await expect(setAvailability(db, 'drv-1', 'ONLINE')).rejects.toMatchObject({ statusCode: 403 });
+    expect(update).not.toHaveBeenCalled();
+  });
+
   // Going offline mid-job would strand the shipment with nobody tracking it.
   it('refuses to take a driver offline while they hold a shipment', async () => {
     const { db, update } = makeDb(driver({ currentShipmentId: 'ship-1' }));
@@ -64,11 +71,13 @@ describe('setAvailability', () => {
 });
 
 describe('listDrivers', () => {
-  it('filters on both fields when asking for available drivers', async () => {
+  // Assignable means online, idle AND vetted - an unapproved driver must never
+  // appear in dispatch's picker.
+  it('filters on availability, job and approval when asking for available drivers', async () => {
     const { db, findMany } = makeDb(driver());
     await listDrivers(db, { available: true });
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { availability: 'ONLINE', currentShipmentId: null },
+      where: { availability: 'ONLINE', currentShipmentId: null, approvedAt: { not: null } },
     }));
   });
 
